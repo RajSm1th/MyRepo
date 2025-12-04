@@ -3,92 +3,66 @@ import pandas as pd
 import numpy as np
 import pickle
 
-# ---------------------------
-# LOAD MODEL + PREPROCESSORS
-# ---------------------------
-MODEL_PATH = "model.pkl"
-SCALER_PATH = "scaler.pkl"
-ENCODER_PATH = "encoders.pkl"
+# Load files
+model = pickle.load(open("model.pkl", "rb"))
+scaler = pickle.load(open("scaler.pkl", "rb"))
+encoders = pickle.load(open("encoders.pkl", "rb"))   # dict of LabelEncoders
 
-model = pickle.load(open(MODEL_PATH, "rb"))
-scaler = pickle.load(open(SCALER_PATH, "rb"))
-encoders = pickle.load(open(ENCODER_PATH, "rb"))   # dictionary of label encoders
+st.title("HR Attrition Prediction (Manual Preprocessing)")
 
-st.title("🔮 HR Attrition Prediction App")
-st.write("Enter employee details below to predict attrition probability.")
-
-
-# ---------------------------
-# STREAMLIT FORM UI
-# ---------------------------
-with st.form("prediction_form"):
-    
-    col1, col2 = st.columns(2)
-
-    with col1:
-        Age = st.number_input("Age", 18, 65, 30)
-        Gender = st.selectbox("Gender", ["Male", "Female"])
-        Education = st.selectbox("Education", ["Basic", "Technical Degree", "Bachelor", "Master", "PhD"])
-        MaritalStatus = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
-        JobRole = st.selectbox("Job Role", ["Laboratory Technician","Sales Executive","Research Scientist","Manager"])
-
-    with col2:
-        MonthlyIncome = st.number_input("Monthly Income", 1000, 50000, 5000)
-        TotalWorkingYears = st.number_input("Total Working Years", 0, 40, 5)
-        YearsAtCompany = st.number_input("Years at Company", 0, 40, 3)
-        OverTime = st.selectbox("OverTime", ["Yes", "No"])
-        JobSatisfaction = st.slider("Job Satisfaction (1–4)", 1, 4, 3)
-    
-    submitted = st.form_submit_button("Predict Attrition")
-
-
-# ---------------------------
-# MAKE PREDICTION
-# ---------------------------
-if submitted:
-
-    input_dict = {
-        "Age": Age,
-        "Gender": Gender,
-        "Education": Education,
-        "MaritalStatus": MaritalStatus,
-        "JobRole": JobRole,
-        "MonthlyIncome": MonthlyIncome,
-        "TotalWorkingYears": TotalWorkingYears,
-        "YearsAtCompany": YearsAtCompany,
-        "OverTime": OverTime,
-        "JobSatisfaction": JobSatisfaction
-    }
-
-    df_input = pd.DataFrame([input_dict])
-
-
-    # ---------------------------
-    # LABEL ENCODING
-    # ---------------------------
+def preprocess_input(df):
+    # Apply label encoders
     for col, encoder in encoders.items():
-        if col in df_input.columns:
-            df_input[col] = encoder.transform(df_input[col])
+        df[col] = encoder.transform(df[col])
 
+    # Scale numeric columns
+    num_cols = scaler.feature_names_in_
+    df[num_cols] = scaler.transform(df[num_cols])
 
-    # ---------------------------
-    # SCALING
-    # ---------------------------
-    df_scaled = scaler.transform(df_input)
+    return df
 
+# Input UI
+age = st.number_input("Age", 18, 60)
+income = st.number_input("Monthly Income", 1000, 100000)
+num_comp = st.number_input("Num Companies Worked", 0, 10)
+years_company = st.number_input("Years at Company", 0, 40)
+years_role = st.number_input("Years in Current Role", 0, 20)
 
-    # ---------------------------
-    # PREDICTION
-    # ---------------------------
-    pred = model.predict(df_scaled)[0]
-    prob = model.predict_proba(df_scaled)[0][1]
+overtime = st.selectbox("OverTime", ["Yes", "No"])
+jobsat = st.slider("Job Satisfaction", 1, 4)
+wlb = st.slider("Work Life Balance", 1, 4)
+envsat = st.slider("Environment Satisfaction", 1, 4)
+edu = st.slider("Education Level", 1, 5)
 
+edu_field = st.selectbox("Education Field", ["Engineering", "Technical", "Human Resources", "Marketing"])
+jobrole = st.selectbox("Job Role", ["Manufacturing Director", "Sales Executive", "Manager"])
+dept = st.selectbox("Department", ["Operations", "R&D", "Sales"])
+gender = st.selectbox("Gender", ["Male", "Female"])
+marital = st.selectbox("Marital Status", ["Single", "Married", "Divorced"])
 
-    # ---------------------------
-    # OUTPUT
-    # ---------------------------
-    st.subheader("📌 Prediction Result:")
-    if pred == 1:
-        st.error(f"Employee is LIKELY to leave. Probability = {prob:.2f}")
-    else:
-        st.success(f"Employee is NOT likely to leave. Probability = {prob:.2f}")
+if st.button("Predict"):
+    df = pd.DataFrame([{
+        "Age": age,
+        "MonthlyIncome": income,
+        "NumCompaniesWorked": num_comp,
+        "YearsAtCompany": years_company,
+        "YearsInCurrentRole": years_role,
+        "OverTime": overtime,
+        "JobSatisfaction": jobsat,
+        "WorkLifeBalance": wlb,
+        "EnvironmentSatisfaction": envsat,
+        "Education": edu,
+        "EducationField": edu_field,
+        "JobRole": jobrole,
+        "Department": dept,
+        "Gender": gender,
+        "MaritalStatus": marital
+    }])
+
+    df_preprocessed = preprocess_input(df)
+
+    pred = model.predict(df_preprocessed)[0]
+    prob = model.predict_proba(df_preprocessed)[0][1]
+
+    st.write("### Prediction:", "Employee Will Leave" if pred==1 else "Employee Will Stay")
+    st.write("### Probability:", round(prob, 2))
